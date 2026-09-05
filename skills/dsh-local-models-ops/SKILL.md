@@ -20,14 +20,14 @@ The plugin spawn must match the tuned daily config. Verify against
 | `--flash-attn on --kv-unified` | always |
 | `--cache-type-k q8_0 --cache-type-v q4_0` | fixed |
 | reasoning chain | `--reasoning auto --reasoning-format deepseek --no-reasoning-preserve --reasoning-effort medium` |
-| MTP | `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` when `mtp > 0 && ctx <= 131072` (draft dropped above the ctx ceiling; depth capped at 3 — fixed depth > 3 collapses at large ctx) |
+| MTP | `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` when `mtp > 0 && (ctx <= 131072 || ignoreCtxCap)` (draft dropped above the ctx ceiling; depth capped at 3 — fixed depth > 3 collapses at large ctx) |
 | mmproj | `--mmproj <file> --image-min-tokens 1024` + `--no-mmproj-offload` when the tab checkbox is on (default) |
 | spawn env | `RADV_PERFTEST=nogttspill` |
 
 ## 2. Profiles audit (`~/.dsh/local-models/profiles.json`)
 
 Schema per profile: `{ id, name, modelPath, ctx, mtpHeads, mmprojPath,
-effort, updatedAt }`. Known audit items:
+effort, ignoreCtxCap, updatedAt }`. Known audit items:
 
 - **Paths must exist and live on the fast mount**. Referencing the failing/
   legacy `/mnt/disco1` is a red flag - targets are under `/mnt/raid0/GGUF/`.
@@ -42,6 +42,7 @@ effort, updatedAt }`. Known audit items:
 
 - `_mtp = useState(2)` (fixed-MTP head default; the daily tune wants 3)
 - `_mmCpu = useState(true)` (mmproj on CPU, frees ~0.87 GiB VRAM)
+- softcap checkbox unchecked by default (`ignoreCtxCap: false` unless the profile sets it)
 
 ## 4. Diagnostics
 

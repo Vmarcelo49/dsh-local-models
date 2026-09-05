@@ -53,7 +53,7 @@ Restart the dsh web process (bundle composition picks up only at boot), refresh 
 | `LOCAL_MODELS_IMAGE_PIXEL_BUDGET` | `4194304` | vision pixel budget |
 | `DSH_HOME` | `~/.dsh` | data dir (`local-models/profiles.json`, `llama-server.log`) |
 
-Launch flags are fixed to the validated daily config: full offload, `-b 2048 -ub 512 -t 4 -np 1`, `--flash-attn on --kv-unified`, `--cache-type-k q8_0 --cache-type-v q4_0`, MTP `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` (dropped above 131072 ctx).
+Launch flags are fixed to the validated daily config: full offload, `-b 2048 -ub 512 -t 4 -np 1`, `--flash-attn on --kv-unified`, `--cache-type-k q8_0 --cache-type-v q4_0`, MTP `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` (dropped above 131072 ctx unless the profile sets `ignoreCtxCap` — the tab's “ignore the MTP ctx softcap” checkbox, which forces the draft on at any ctx and may OOM or collapse decode).
 
 ## HTTP API (mounted under `/local-models`)
 

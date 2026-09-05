@@ -28,7 +28,7 @@ for (const p of profiles) {
   const id = p.id || p.name || "?";
   const ok = (f) => (f ? (existsSync(f) ? "ok" : "MISSING") : "none");
   const legacy = [p.modelPath, p.mmprojPath].some((f) => f && f.includes(LEGACY));
-  const metrics = `ctx=${p.ctx} mtp=${p.mtpHeads} effort=${p.effort ?? "?"}`;
+  const metrics = `ctx=${p.ctx} mtp=${p.mtpHeads} effort=${p.effort ?? "?"}${p.ignoreCtxCap === true ? " nocap" : ""}`;
   console.log(`- ${id}: model=${ok(p.modelPath)} mmproj=${ok(p.mmprojPath)} | ${metrics}${legacy ? " | !!legacy disco1" : ""}`);
   if (legacy) issues++;
   if (p.modelPath && !existsSync(p.modelPath)) issues++;
