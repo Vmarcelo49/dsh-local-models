@@ -46,6 +46,7 @@ Restart the dsh web process (bundle composition picks up only at boot), refresh 
 |---|---|---|
 | `LOCAL_MODELS_PORT` | `8080` | `llama-server` port |
 | `LOCAL_MODELS_BIN` | `~/Projetos/llama.cpp/build/bin/llama-server` | server binary |
+| `LOCAL_MODELS_SHORTCUTS` | `/mnt/raid0/GGUF` | colon-separated file-browser shortcut dirs (`name=path` for custom labels) |
 | `LOCAL_MODELS_MMPROJ_CPU` | `1` | vision projector weights in RAM (`0` = offload to GPU) |
 | `LOCAL_MODELS_ROUTER_MAX` | `1` | max simultaneously resident router models |
 | `LOCAL_MODELS_MAX_IMAGE_BYTES` | `10485760` | vision image guard |
