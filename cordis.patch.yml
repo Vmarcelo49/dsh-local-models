@@ -1,0 +1,7 @@
+# dsh-local-models bundle patch: mount the addon as one composition row.
+# Bundle layers insert rows over the shared root, so the row goes under an
+# `insert` key (a plain row would only patch an existing entry).
+
+- insert:
+    - id: dsh-local-models
+      name: dsh-local-models

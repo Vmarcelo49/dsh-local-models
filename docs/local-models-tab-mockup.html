@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Models tab — UI refactor mockup</title>
+<style>
+  :root {
+    --bg: #101418; --layer1: #161b21; --border-l2: #2a323c; --border-l3: #1e252d;
+    --label-primary: #e8ecf1; --label-secondary: #aeb8c3; --label-tertiary: #7c8794;
+    --btn-fill: #3d7eff; --btn-fg: #ffffff; --success: #3fbf7f; --error: #e5534b; --warn: #e8b14a;
+    --code: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--label-primary); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 24px; }
+  .page { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  h2 { margin: 0; font-size: 16px; font-weight: 500; }
+  .intro { margin: 0; font-size: 13px; color: var(--label-tertiary); }
+  .card { border: 1px solid var(--border-l2); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: var(--layer1); }
+  .card h3 { margin: 0; font-size: 13px; font-weight: 500; color: var(--label-secondary); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--label-tertiary); }
+  input[type=text], input[type=number], select {
+    box-sizing: border-box; border: 1px solid var(--border-l2); height: 32px; font: inherit;
+    background: #0d1115; color: var(--label-primary); border-radius: 8px; padding: 0 10px; font-size: 14px;
+  }
+  input[type=range] { accent-color: var(--btn-fill); }
+  input[type=range]:disabled, select:disabled { opacity: .45; }
+  button { height: 32px; font: inherit; cursor: pointer; border: none; border-radius: 16px; padding: 0 14px; font-size: 13px; }
+  .btn-primary { background: var(--btn-fill); color: var(--btn-fg); }
+  .btn-secondary { background: transparent; border: 1px solid var(--border-l2); color: var(--label-primary); }
+  .btn-ghost { background: transparent; border: none; color: var(--label-secondary); padding: 0 8px; }
+  .mono { font-family: var(--code); font-size: 12px; }
+  .small { font-size: 12px; color: var(--label-tertiary); }
+  .good { color: var(--success); font-weight: 500; }
+  .bad { color: var(--error); font-weight: 500; }
+  .warn { color: var(--warn); }
+  table { border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--border-l3); color: var(--label-tertiary); font-weight: 500; }
+  td { padding: 4px 10px; border-bottom: 1px solid var(--border-l3); }
+  .typ { display: flex; justify-content: space-between; gap: 12px; }
+  .profile-row { border: 1px solid var(--border-l3); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: #0d1115; }
+  .chip { font-size: 11px; color: var(--label-secondary); border: 1px solid var(--border-l3); border-radius: 999px; padding: 2px 8px; }
+  .chip.gemma { color: var(--warn); border-color: var(--warn); }
+  .banner { border: 1px dashed var(--border-l2); color: var(--label-tertiary); font-size: 12px; border-radius: 8px; padding: 8px 12px; }
+  .est { border: 1px solid var(--border-l2); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; background: #0d1115; }
+</style>
+</head>
+<body>
+<div class="page" id="app"></div>
+<script>
+"use strict";
+// ---------------------------------------------------------------------------
+// Mock data: stands in for /local-models/* routes (profiles use localStorage
+// so save/load actually works across refreshes in the mockup).
+// ---------------------------------------------------------------------------
+const MODELS = [
+  { id: "qwen3-8-27b", name: "Qwen3.8-27B IQ4_XS", file: "Qwen3.8-27B-IQ4_XS-3.67bpw.gguf", ctxMax: 131072, weightsGB: 12.6, vision: true, gemma: false },
+  { id: "gemma-3-27b", name: "Gemma 3 27B Q4_K_M", file: "Gemma-3-27B-it-Q4_K_M.gguf", ctxMax: 131072, weightsGB: 14.1, vision: true, gemma: true },
+  { id: "llama-3-3", name: "Llama 3.3 70B Q4_K_M", file: "Llama-3.3-70B-Instruct-Q4_K_M.gguf", ctxMax: 131072, weightsGB: 36.2, vision: false, gemma: false },
+];
+const EFFORTS = ["off", "low", "medium", "xhigh"]; // probe-validated set
+const LS = "local-models-mock-profiles";
+const OVERHEAD_GB = 0.2, VISION_GB = 1.1, VRAM_TOTAL = 16;
+let profiles = []; try { profiles = JSON.parse(localStorage.getItem(LS) || "[]"); } catch (e) { profiles = []; }
+function persist() { localStorage.setItem(LS, JSON.stringify(profiles)); }
+
+let state = {
+  modelId: "qwen3-8-27b",
+  ctx: 65536,
+  mtp: 2,
+  effort: "medium",
+  mmproj: true,
+  profileName: "",
+  message: null,
+  statusText: "idle",
+  registered: null,
+};
+const model = () => MODELS.find((m) => m.id === state.modelId);
+
+// ---------------------------------------------------------------------------
+// Pure-ish pieces mirroring the refactored client structure.
+// ---------------------------------------------------------------------------
+function estimate(s) {
+  const m = model();
+  if (!m) return null;
+  const kvGB = 0.05 + (s.ctx / 32768) * 2.6;                       // Q8_0 K / Q4_0 V, per-ctx
+  const computeGB = 0.8 + 0.02 * (s.ctx / 8192);
+  const mmprojGB = s.mmproj && m.vision ? VISION_GB : 0;
+  const total = m.weightsGB + kvGB + computeGB + mmprojGB + OVERHEAD_GB;
+  const fits = total <= VRAM_TOTAL;
+  const maxCtx = 8192 + Math.floor(((VRAM_TOTAL - m.weightsGB - mmprojGB - computeGB - OVERHEAD_GB - 0.05) / 2.6) / 8192) * 8192;
+  return { m, kvGB, computeGB, mmprojGB, total, fits, fitsSafe: total <= VRAM_TOTAL - 0.7, maxCtx: Math.max(8192, Math.min(m.ctxMax, maxCtx)) };
+}
+function fmtGB(n) { return n.toFixed(2) + " GiB"; }
+function fmtCtx(n) { return (n % 1024 === 0 ? (n / 1024) : n / 1024) >= 1 ? Math.round(n / 1024) + "K" : String(n); }
+
+function render() {
+  const app = document.getElementById("app");
+  const m = model();
+  const est = estimate(state);
+  const el = h;
+
+  app.innerHTML = "";
+  app.append(
+    el("h2", "Local Models"),
+    el("p", { className: "intro" }, "Refactor mockup — same sections, Profiles first. Styling approximates the dsh settings theme; interactions are real (sliders, selects, profile save/load/delete via localStorage)."),
+    profilesCard(m),
+    pickerCard(m),
+    tuningCard(m),
+    estimateCard(est),
+    actionsCard(m),
+    statusCard(m),
+    el("div", { className: "banner" }, "Gemma models: the VRAM math is knowingly approximate — see KNOWN_ISSUES.md. The estimate chip marks Gemma checkpoints."),
+  );
+}
+
+// tiny helper to build elements without React (React-style: h(tag, attrs, children))
+function isObj(v) { return typeof v === "object" && v !== null && !Array.isArray(v) && !(v instanceof HTMLElement); }
+function h(tag, a, b) {
+  const node = document.createElement(tag);
+  let attrs = null, children = null;
+  // Support both h(tag, attrs, children) and h(tag, children, attrs).
+  if (isObj(a)) { attrs = a; children = b === undefined ? null : b; }
+  else { children = a; attrs = b === undefined ? null : b; }
+  const kids = Array.isArray(children) ? children : children == null ? [] : [children];
+  for (const kid of kids) if (kid !== null && kid !== undefined && kid !== false) node.append(kid instanceof HTMLElement ? kid : document.createTextNode(String(kid)));
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "className") node.className = v;
+    else if (k === "style") Object.assign(node.style, v);
+    else if (k === "disabled") node.disabled = true;
+    else if (k === "onclick" || k === "oninput" || k === "onchange") node.addEventListener(k.slice(2), v);
+    else if (k === "value" && (node.tagName === "INPUT" || node.tagName === "SELECT" || node.tagName === "TEXTAREA" || node.tagName === "OPTION")) node.value = v;
+    else if (k === "type" && node.tagName === "INPUT") node.type = v;
+    else node.setAttribute(k, String(v));
+  }
+  return node;
+}
+function card(title, body, banner) {
+  const c = h("div", { className: "card" });
+  if (title) c.append(h("h3", title));
+  if (banner) c.append(h("div", { className: "banner" }, banner));
+  for (const b of [].concat(body)) if (b) c.append(b);
+  return c;
+}
+
+// --- section renderers ------------------------------------------------------
+function pickerCard(m) {
+  return card("Model", [
+    h("div", { className: "row" },
+      h("button", { className: "btn-secondary", onclick: pickFake }, "Choose GGUF…"),
+    ),
+    m ? h("span", { className: "mono", style: { wordBreak: "break-all" } }, m.file) : h("span", { className: "small" }, "no model selected — pick a .gguf file"),
+    m && m.vision ? h("div", { className: "row" },
+      h("button", { className: "btn-ghost", onclick: () => { state.mmproj = !state.mmproj; render(); } }, "Vision mmproj " + (state.mmproj ? "on" : "off")),
+      h("span", { className: "small" }, state.mmproj ? "mmproj attached" : "none"),
+      state.mmproj ? h("button", { className: "btn-ghost", onclick: () => { state.mmproj = false; render(); } }, "✕ Clear") : null,
+    ) : null,
+  ]);
+}
+function pickFake() {
+  const names = Object.fromEntries(MODELS.map((m) => [m.id, m.file]));
+  const pick = prompt("Mock file picker — choose a model id: " + MODELS.map((m) => m.id + " (" + m.file + ")").join(" | "), "qwen3-8-27b");
+  if (pick && names[pick]) { state.modelId = pick; state.mmproj = model().vision; state.statusText = "idle"; render(); }
+}
+function tuningCard(m) {
+  const ctxMax = m ? m.ctxMax : 32768;
+  const effOpts = EFFORTS.map((e) => h("option", { value: e }, e));
+  return card("Tuning", [
+    h("label", { className: "field" }, "Context (steps of 8K, max " + fmtCtx(ctxMax) + ")",
+      h("div", { className: "row" },
+        h("input", { type: "range", min: 8192, max: ctxMax, step: 8192, value: state.ctx, oninput: (e) => { state.ctx = Number(e.target.value); render(); } }),
+        h("input", { type: "number", value: state.ctx, style: { width: 110 }, onchange: (e) => { const v = Number(e.target.value); state.ctx = Number.isFinite(v) && v > 0 ? v : 8192; render(); } }),
+        h("span", { className: "small" }, "tokens"),
+      )),
+    h("div", { className: "row" },
+      h("label", { className: "field" }, "Max MTP head",
+        h("select", { value: state.mtp, onchange: (e) => { state.mtp = Number(e.target.value); render(); } }, [0,1,2,3].map((n) => h("option", { value: n }, n === 0 ? "off" : String(n))))),
+      h("label", { className: "field" }, "Thinking level (template-limited)",
+        h("select", { value: state.effort, onchange: (e) => { state.effort = e.target.value; render(); } }, effOpts)),
+    ),
+    h("span", { className: "small" }, "Server default thinking level; dsh can also request effort per message after registering. low/medium/xhigh are the probe-validated values."),
+  ]);
+}
+function estimateCard(est) {
+  if (!est) return card("VRAM estimate", h("p", { className: "small" }, "Pick a model to see an estimate."));
+  return card("VRAM estimate (16 GiB total)", [
+    est.m.gemma ? h("span", { className: "chip gemma" }, "≈ approximate for Gemma (see KNOWN_ISSUES.md)") : null,
+    h("div", { className: "est" },
+      h("div", { className: "typ" }, h("span", {}, "Weights"), h("span", { className: "mono" }, fmtGB(est.m.weightsGB))),
+      h("div", { className: "typ" }, h("span", {}, "KV cache (Q8_0 K / Q4_0 V)"), h("span", { className: "mono" }, fmtGB(est.kvGB))),
+      est.mmprojGB > 0 ? h("div", { className: "typ" }, h("span", {}, "Vision encoder (mmproj)"), h("span", { className: "mono" }, fmtGB(est.mmprojGB))) : null,
+      h("div", { className: "typ" }, h("span", {}, "Compute / graph"), h("span", { className: "mono" }, fmtGB(est.computeGB))),
+      h("div", { className: "typ" }, h("span", {}, "Overhead"), h("span", { className: "mono" }, fmtMiB(0.2))),
+      h("div", { className: "typ", style: { borderTop: "1px solid #2a323c", paddingTop: 6, fontWeight: 500 } }, h("span", {}, "Total"), h("span", { className: "mono" }, fmtGB(est.total))),
+      h("div", { className: "typ" }, h("span", {}, "Fits 16 GiB"), h("span", { className: est.fits ? "good" : "bad" }, est.fits ? "yes" : "no")),
+      h("div", { className: "typ" }, h("span", {}, "Fits with 700 MB margin"), h("span", { className: est.fitsSafe ? "good" : "bad" }, est.fitsSafe ? "yes" : "no")),
+      h("div", { className: "typ" }, h("span", {}, "Max ctx that fits"), h("span", { className: "mono" }, fmtCtx(est.maxCtx))),
+    ),
+  ]);
+}
+function fmtMiB(gb) { return (gb * 1024).toFixed(0) + " MiB"; }
+function actionsCard(m) {
+  return card("Actions", [
+    h("div", { className: "row" },
+      h("button", { className: "btn-primary", onclick: () => { state.statusText = "starting…"; setTimeout(() => { state.statusText = "ready — pid 1234 · effort " + state.effort + (state.mmproj ? " · vision" : ""); render(); }, 300); render(); } }, "Load model"),
+      h("button", { className: "btn-secondary", onclick: () => { state.statusText = "idle"; render(); } }, "Stop"),
+      h("button", { className: "btn-secondary", onclick: () => { const route = "local-" + (m ? m.id : "model"); state.registered = "route " + route + " · input " + (state.mmproj ? "text,image" : "text") + " · efforts " + EFFORTS.join("/"); render(); } }, "Register in dsh"),
+      h("span", { className: "small" }, state.statusText),
+    ),
+  ]);
+}
+function profilesCard(m) {
+  const body = [
+    h("div", { className: "row" },
+      h("input", { type: "text", placeholder: "Profile name (e.g. qwen-vision-xhigh)", value: state.profileName, style: { width: 260 }, oninput: (e) => { state.profileName = e.target.value; render(); } }),
+      h("button", { className: "btn-primary", onclick: saveProfile }, "Save current"),
+    ),
+    profiles.length === 0 ? h("p", { className: "small" }, "No profiles yet — save the current selection for later.") : null,
+    ...profiles.map((p, i) => {
+      const pm = MODELS.find((x) => x.id === p.modelId);
+      return h("div", { className: "profile-row", style: { flexDirection: "column", alignItems: "flex-start" } },
+        h("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
+          h("span", { className: "mono" }, p.name),
+          h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } },
+            h("span", { className: "chip" }, pm ? pm.file : p.modelId),
+            h("span", { className: "chip" }, fmtCtx(p.ctx)),
+            h("span", { className: "chip" }, "effort " + p.effort),
+            h("span", { className: "chip" }, p.mmproj ? "vision" : "text"),
+          ),
+        ),
+        h("div", { style: { display: "flex", gap: 8 } },
+          h("button", { className: "btn-ghost", onclick: () => loadProfile(i) }, "Load"),
+          h("button", { className: "btn-ghost", style: { color: "var(--error)" }, onclick: () => { profiles.splice(i, 1); persist(); render(); } }, "Delete"),
+        ),
+      );
+    }),
+    state.message ? h("p", { className: "warn" }, state.message) : null,
+  ];
+  return card("Profiles (new)", body);
+}
+function saveProfile() {
+  const name = state.profileName.trim();
+  if (!name) { state.message = "enter a profile name first"; render(); return; }
+  const m = model(); if (!m) { state.message = "pick a model first"; render(); return; }
+  const existing = profiles.findIndex((p) => p.name.toLowerCase() === name.toLowerCase());
+  const entry = { name, modelId: state.modelId, ctx: state.ctx, mtp: state.mtp, effort: state.effort, mmproj: state.mmproj };
+  if (existing >= 0) profiles[existing] = entry; else profiles.push(entry);
+  persist();
+  state.message = "saved '" + name + "'";
+  state.profileName = "";
+  render();
+}
+function loadProfile(i) {
+  const p = profiles[i]; if (!p) return;
+  state.modelId = p.modelId; state.ctx = p.ctx; state.mtp = p.mtp; state.effort = p.effort; state.mmproj = !!p.mmproj;
+  state.message = "loaded '" + p.name + "' — press Load model to start";
+  render();
+}
+function statusCard(m) {
+  return card("Status", [
+    h("div", {}, h("span", {}, "Status: "), h("span", { className: "mono" }, state.statusText)),
+    h("div", {}, h("span", {}, "PID: "), h("span", { className: "mono" }, state.statusText === "idle" ? "—" : "1234"), h("span", { style: { marginLeft: 16 } }, "ctx: "), h("span", { className: "mono" }, fmtCtx(state.ctx)), h("span", { style: { marginLeft: 16 } }, "effort: "), h("span", { className: "mono" }, state.effort)),
+    state.registered ? h("div", {}, h("span", {}, "Registered: "), h("span", { className: "mono" }, state.registered)) : null,
+  ]);
+}
+
+render();
+</script>
+</body>
+</html>
