@@ -65,7 +65,11 @@ effort, updatedAt }`. Known audit items:
 ## 6. Register in dsh + opencode wiring
 
 `POST /local-models/register` adds the ready server as an `llm-pi-ai`
-provider route on the dsh webserver. For opencode against the spawned server:
+provider route on the dsh webserver. Single-model mode needs the manual
+**Register in dsh** press; router mode has no Register button — starting
+the router auto-registers the `local-router` route once the server is
+ready (a refresh poll fires it; stopping first cancels a pending one).
+For opencode against the spawned server:
 - the opencode config resolves per directory (project `opencode.json` beats
   nothing; the global `~/.config/opencode/opencode.json(c)` is authoritative
   from arbitrary cwds),

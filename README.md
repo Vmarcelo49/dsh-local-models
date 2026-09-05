@@ -10,7 +10,7 @@ Built against stock upstream `llama.cpp` (`llama-server`). No fork, no patches, 
 - **Launch options** — context slider (8K steps, capped at the model's trained context) + fine-tune input, fixed MTP draft depth (0–3), thinking level (`off`/`low`/`medium`/`xhigh`), optional vision `mmproj` (GPU or CPU offload), MoE expert placement (`--cpu-moe` / `--n-cpu-moe` / top-k override) with a fit-to-VRAM helper
 - **Live VRAM estimate** — weights + Q8_0/Q4_0 KV cache + recurrent state + compute/graph + overhead against 16 GB, with fits / safe-margin / max-ctx-that-fits rows (see [Known issues](./KNOWN_ISSUES.md) for Gemma-family accuracy)
 - **Profiles** — save named launch configurations, reload in one click
-- **Router mode** — serve all saved profiles from one OpenAI-compatible endpoint (`--models-preset`); models load on demand, one resident at a time by default
+- **Router mode** — serve all saved profiles from one OpenAI-compatible endpoint (`--models-preset`); models load on demand, one resident at a time by default. Starting the router automatically (re-)registers its models in dsh — no manual Register press.
 - **Register in dsh** — writes the ready server as an `llm-pi-ai` provider route (vision modality + thinking levels included)
 - **Terminal overlay** — live tail of the `llama-server` log from the tab
 
