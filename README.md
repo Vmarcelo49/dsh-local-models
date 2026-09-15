@@ -7,7 +7,7 @@ Built against stock upstream `llama.cpp` (`llama-server`). No fork, no patches, 
 ## Features
 
 - **Model picker** — in-app file browser (directories + `.gguf` only) with a header-only GGUF parse (architecture, quant, layers, context length, MoE detection) behind `POST /local-models/gguf-meta`
-- **Launch options** — context slider (8K steps, capped at the model's trained context) + fine-tune input, fixed MTP draft depth (0–3), thinking level (`off`/`low`/`medium`/`xhigh`), optional vision `mmproj` (GPU or CPU offload), MoE expert placement (`--cpu-moe` / `--n-cpu-moe` / top-k override) with a fit-to-VRAM helper
+- **Launch options** — context slider (8K steps, capped at the model's trained context) + fine-tune input, fixed MTP draft depth (0–3), thinking level (`off`/`low`/`medium`/`xhigh`) + preserve-thinking toggle (`--reasoning-preserve` vs `--no-reasoning-preserve`, default off), optional vision `mmproj` (GPU or CPU offload), MoE expert placement (`--cpu-moe` / `--n-cpu-moe` / top-k override) with a fit-to-VRAM helper
 - **Live VRAM estimate** — weights + Q8_0/Q4_0 KV cache + recurrent state + compute/graph + overhead against 16 GB, with fits / safe-margin / max-ctx-that-fits rows (see [Known issues](./KNOWN_ISSUES.md) for Gemma-family accuracy)
 - **Profiles** — save named launch configurations, reload in one click
 - **Router mode** — serve all saved profiles from one OpenAI-compatible endpoint (`--models-preset`); models load on demand, one resident at a time by default. Starting the router automatically (re-)registers its models in dsh — no manual Register press.
@@ -35,7 +35,7 @@ Restart the dsh web process (bundle composition picks up only at boot), refresh 
 ## Usage
 
 1. **Choose GGUF…** — pick a model file (Home / Models shortcuts, Up navigation).
-2. Tune **context**, **Max MTP head** (fixed draft; capped at 3 — deeper collapses at large ctx), **thinking level**, optional **mmproj** and **MoE** settings.
+2. Tune **context**, **Max MTP head** (fixed draft; capped at 3 — deeper collapses at large ctx), **thinking level** + **preserve thinking** checkbox, optional **mmproj** and **MoE** settings.
 3. **Load model**, watch the status card, inspect output via **Open terminal**.
 4. **Register in dsh** — the route (default `local-<alias>`) appears in the Models picker.
 5. Alternatively, save **profiles** and **Start router (from profiles)** for a multi-model endpoint.
@@ -53,7 +53,7 @@ Restart the dsh web process (bundle composition picks up only at boot), refresh 
 | `LOCAL_MODELS_IMAGE_PIXEL_BUDGET` | `4194304` | vision pixel budget |
 | `DSH_HOME` | `~/.dsh` | data dir (`local-models/profiles.json`, `llama-server.log`) |
 
-Launch flags are fixed to the validated daily config: full offload, `-b 2048 -ub 512 -t 4 -np 1`, `--flash-attn on --kv-unified`, `--cache-type-k q8_0 --cache-type-v q4_0`, MTP `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` (dropped above 131072 ctx unless the profile sets `ignoreCtxCap` — the tab's “ignore the MTP ctx softcap” checkbox, which forces the draft on at any ctx and may OOM or collapse decode).
+Launch flags are fixed to the validated daily config: full offload, `-b 2048 -ub 512 -t 4 -np 1`, `--flash-attn on --kv-unified`, `--cache-type-k q8_0 --cache-type-v q4_0`, reasoning `--reasoning auto --reasoning-format deepseek --reasoning-effort <level>` plus `--reasoning-preserve` when the preserve toggle (profile `preserveThinking`) is on else `--no-reasoning-preserve`, MTP `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` (dropped above 131072 ctx unless the profile sets `ignoreCtxCap` — the tab's “ignore the MTP ctx softcap” checkbox, which forces the draft on at any ctx and may OOM or collapse decode). Router presets carry the same per-profile choice as `reasoning-preserve = 1/0`.
 
 ## HTTP API (mounted under `/local-models`)
 

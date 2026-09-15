@@ -19,7 +19,7 @@ The plugin spawn must match the tuned daily config. Verify against
 | `-ngl 999 -c <ctx>` | full offload, ctx from the tab slider |
 | `--flash-attn on --kv-unified` | always |
 | `--cache-type-k q8_0 --cache-type-v q4_0` | fixed |
-| reasoning chain | `--reasoning auto --reasoning-format deepseek --no-reasoning-preserve --reasoning-effort medium` |
+| reasoning chain | `--reasoning auto --reasoning-format deepseek --reasoning-preserve/--no-reasoning-preserve --reasoning-effort medium` (preserve toggle in the tab, `preserveThinking` in profiles; default off = `--no-reasoning-preserve`, matching the plugin's historical behavior — upstream defaults to preserve ON) |
 | MTP | `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` when `mtp > 0 && (ctx <= 131072 || ignoreCtxCap)` (draft dropped above the ctx ceiling; depth capped at 3 — fixed depth > 3 collapses at large ctx) |
 | mmproj | `--mmproj <file> --image-min-tokens 1024` + `--no-mmproj-offload` when the tab checkbox is on (default) |
 | spawn env | `RADV_PERFTEST=nogttspill` |
@@ -27,7 +27,8 @@ The plugin spawn must match the tuned daily config. Verify against
 ## 2. Profiles audit (`~/.dsh/local-models/profiles.json`)
 
 Schema per profile: `{ id, name, modelPath, ctx, mtpHeads, mmprojPath,
-effort, ignoreCtxCap, updatedAt }`. Known audit items:
+effort, preserveThinking, ignoreCtxCap, updatedAt }` (`preserve_thinking` is
+accepted as an alias on read; router presets emit `reasoning-preserve = 1/0`). Known audit items:
 
 - **Paths must exist and live on the fast mount**. Referencing the failing/
   legacy `/mnt/disco1` is a red flag - targets are under `/mnt/raid0/GGUF/`.
