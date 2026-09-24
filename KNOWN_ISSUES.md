@@ -10,7 +10,8 @@ visibly off from measurements/laid-out sizes).
 
 **Why:** the estimate (client-side, in `lib/client.js`) is a port of the
 Qwen/llama-family KV-cache and graph formulas: standard per-head KV bytes
-(`Q8_0 (K) / Q4_0 (V)`), sliding-window local/global attention share, GDN
+(the tab's selected K/V cache types — `Q5_0 (K) / Q4_1 (V)` by default),
+sliding-window local/global attention share, GDN
 recurrent state, and a fixed compute/graph + 200 MB overhead. Gemma models use
 different attention/layout assumptions (interleaved global-local attention
 structure and head configs that do not match the formula's share or head-dim
@@ -37,6 +38,14 @@ chosen context — only the estimation math is off.
   collapses at large ctx (measured ~12 tok/s at n=6/131K vs ~57 at n=3),
   and the draft is dropped entirely above ctx 131072 (upstream has no
   draft-KV auto-quant). The tab offers 0-3; the API clamps higher values.
+- **KV cache types are per-model, not per-request.** `--cache-type-k` /
+  `--cache-type-v` are launch settings: changing a selector in the tab only
+  takes effect on the next Load (the running server keeps its pair; the status
+  card shows it).
+- **MLA models need matching K/V cache types.** llama.cpp rejects mixed types
+  on DeepSeek-style latent-KV models; the tab flags it and disables Load, and
+  `POST /run` refuses the launch with a clear error instead of letting the
+  child die on its own.
 - See README for architecture and the full configuration surface.
 
 ## MoE expert bytes are an offset-delta heuristic

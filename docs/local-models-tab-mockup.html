@@ -70,6 +70,8 @@ let state = {
   ctx: 65536,
   mtp: 2,
   effort: "medium",
+  kvTypeK: "q5_0",
+  kvTypeV: "q4_1",
   mmproj: true,
   profileName: "",
   message: null,
@@ -77,6 +79,10 @@ let state = {
   registered: null,
 };
 const model = () => MODELS.find((m) => m.id === state.modelId);
+// KV cache quantization the tab offers (llama.cpp `kv_cache_types`), with the
+// ggml bytes-per-element each costs — mirrors KV_TYPES in lib/client.js.
+const KV_BPE = { f32: 4, f16: 2, bf16: 2, q8_0: 34 / 32, q5_1: 24 / 32, q5_0: 22 / 32, q4_1: 20 / 32, iq4_nl: 18 / 32, q4_0: 18 / 32 };
+const KV_TYPES = ["f32", "f16", "bf16", "q8_0", "q5_1", "q5_0", "q4_1", "iq4_nl", "q4_0"];
 
 // ---------------------------------------------------------------------------
 // Pure-ish pieces mirroring the refactored client structure.
@@ -84,13 +90,15 @@ const model = () => MODELS.find((m) => m.id === state.modelId);
 function estimate(s) {
   const m = model();
   if (!m) return null;
-  const kvGB = 0.05 + (s.ctx / 32768) * 2.6;                       // Q8_0 K / Q4_0 V, per-ctx
+  // Per-ctx KV cost scaled from the Q8_0/Q4_0 baseline to the selected pair.
+  const kvScale = (KV_BPE[s.kvTypeK] + KV_BPE[s.kvTypeV]) / (KV_BPE.q8_0 + KV_BPE.q4_0);
+  const kvGB = (0.05 + (s.ctx / 32768) * 2.6) * kvScale;
   const computeGB = 0.8 + 0.02 * (s.ctx / 8192);
   const mmprojGB = s.mmproj && m.vision ? VISION_GB : 0;
   const total = m.weightsGB + kvGB + computeGB + mmprojGB + OVERHEAD_GB;
   const fits = total <= VRAM_TOTAL;
-  const maxCtx = 8192 + Math.floor(((VRAM_TOTAL - m.weightsGB - mmprojGB - computeGB - OVERHEAD_GB - 0.05) / 2.6) / 8192) * 8192;
-  return { m, kvGB, computeGB, mmprojGB, total, fits, fitsSafe: total <= VRAM_TOTAL - 0.7, maxCtx: Math.max(8192, Math.min(m.ctxMax, maxCtx)) };
+  const maxCtx = 8192 + Math.floor(((VRAM_TOTAL - m.weightsGB - mmprojGB - computeGB - OVERHEAD_GB - 0.05 * kvScale) / (2.6 * kvScale)) / 8192) * 8192;
+  return { m, kvGB, kvTypeK: s.kvTypeK, kvTypeV: s.kvTypeV, computeGB, mmprojGB, total, fits, fitsSafe: total <= VRAM_TOTAL - 0.7, maxCtx: Math.max(8192, Math.min(m.ctxMax, maxCtx)) };
 }
 function fmtGB(n) { return n.toFixed(2) + " GiB"; }
 function fmtCtx(n) { return (n % 1024 === 0 ? (n / 1024) : n / 1024) >= 1 ? Math.round(n / 1024) + "K" : String(n); }
@@ -180,7 +188,15 @@ function tuningCard(m) {
       h("label", { className: "field" }, "Thinking level (template-limited)",
         h("select", { value: state.effort, onchange: (e) => { state.effort = e.target.value; render(); } }, effOpts)),
     ),
-    h("span", { className: "small" }, "Server default thinking level; dsh can also request effort per message after registering. low/medium/xhigh are the probe-validated values."),
+    h("div", { className: "row" },
+      h("label", { className: "field" }, "KV cache K (--cache-type-k)",
+        h("select", { value: state.kvTypeK, onchange: (e) => { state.kvTypeK = e.target.value; render(); } },
+          KV_TYPES.map((t) => h("option", { value: t }, t + " (" + KV_BPE[t].toFixed(2) + " B/elt)")))),
+      h("label", { className: "field" }, "KV cache V (--cache-type-v)",
+        h("select", { value: state.kvTypeV, onchange: (e) => { state.kvTypeV = e.target.value; render(); } },
+          KV_TYPES.map((t) => h("option", { value: t }, t + " (" + KV_BPE[t].toFixed(2) + " B/elt)")))),
+    ),
+    h("span", { className: "small" }, "Server default thinking level; dsh can also request effort per message after registering. low/medium/xhigh are the probe-validated values. KV defaults q5_0/q4_1 are the 16 GiB sweet spot; quantized V needs flash-attn (always on) and the MTP draft KV stays q4_0."),
   ]);
 }
 function estimateCard(est) {
@@ -189,7 +205,7 @@ function estimateCard(est) {
     est.m.gemma ? h("span", { className: "chip gemma" }, "≈ approximate for Gemma (see KNOWN_ISSUES.md)") : null,
     h("div", { className: "est" },
       h("div", { className: "typ" }, h("span", {}, "Weights"), h("span", { className: "mono" }, fmtGB(est.m.weightsGB))),
-      h("div", { className: "typ" }, h("span", {}, "KV cache (Q8_0 K / Q4_0 V)"), h("span", { className: "mono" }, fmtGB(est.kvGB))),
+      h("div", { className: "typ" }, h("span", {}, "KV cache (" + est.kvTypeK.toUpperCase() + " K / " + est.kvTypeV.toUpperCase() + " V)"), h("span", { className: "mono" }, fmtGB(est.kvGB))),
       est.mmprojGB > 0 ? h("div", { className: "typ" }, h("span", {}, "Vision encoder (mmproj)"), h("span", { className: "mono" }, fmtGB(est.mmprojGB))) : null,
       h("div", { className: "typ" }, h("span", {}, "Compute / graph"), h("span", { className: "mono" }, fmtGB(est.computeGB))),
       h("div", { className: "typ" }, h("span", {}, "Overhead"), h("span", { className: "mono" }, fmtMiB(0.2))),

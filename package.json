@@ -4,6 +4,13 @@
   "description": "dsh addon: a Local Models settings tab that starts and stops a llama-server child process living with the dsh host process.",
   "type": "module",
   "main": "lib/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "audit": "node skills/dsh-local-models-ops/scripts/audit-profiles.mjs"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Vmarcelo49/dsh-local-models.git"
@@ -32,6 +39,7 @@
   },
   "files": [
     "lib",
+    "skills",
     "cordis.patch.yml"
   ],
   "license": "MIT"

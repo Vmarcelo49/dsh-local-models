@@ -1,6 +1,6 @@
 ---
 name: dsh-local-models-ops
-description: Operate and maintain the dsh-local-models plugin that spawns llama-server from the dsh Web GUI. Verify the spawned args match the tuned upstream llama-server config (fixed MTP depth, q8_0/q4_0 KV, mmproj on CPU), audit and fix ~/.dsh/local-models/profiles.json (model/mmproj paths, MTP per profile), restart the dsh web after node-half changes, and diagnose a spawned server (cmdline, log, DRM VRAM, /slots fill). Use when the daily server is run via the Local Models tab or when plugin config/profiles diverge from the tuning. Only useful inside this project.
+description: Operate and maintain the dsh-local-models plugin that spawns llama-server from the dsh Web GUI. Verify the spawned args match the tuned upstream llama-server config (fixed MTP depth, KV cache K/V types from the tab, mmproj on CPU), audit and fix ~/.dsh/local-models/profiles.json (model/mmproj paths, MTP per profile, KV pairs), restart the dsh web after node-half changes, and diagnose a spawned server (cmdline, log, DRM VRAM, /slots fill). Use when the daily server is run via the Local Models tab or when plugin config/profiles diverge from the tuning. Only useful inside this project.
 ---
 
 # dsh-local-models-ops
@@ -18,17 +18,20 @@ The plugin spawn must match the tuned daily config. Verify against
 |---|---|
 | `-ngl 999 -c <ctx>` | full offload, ctx from the tab slider |
 | `--flash-attn on --kv-unified` | always |
-| `--cache-type-k q8_0 --cache-type-v q4_0` | fixed |
+| `--cache-type-k <K> --cache-type-v <V>` | from the tab's K/V selectors (`kvTypeK`/`kvTypeV` in profiles), default `q5_0`/`q4_1`; accepted ids: `f32 f16 bf16 q8_0 q5_1 q5_0 q4_1 iq4_nl q4_0`. MLA models (DeepSeek-style latent KV, `isMla` in the GGUF) must use the same type for both |
+| `--spec-draft-type-k q4_0 --spec-draft-type-v q4_0` | fixed (MTP draft KV is not user-selectable) |
 | reasoning chain | `--reasoning auto --reasoning-format deepseek --reasoning-preserve/--no-reasoning-preserve --reasoning-effort medium` (preserve toggle in the tab, `preserveThinking` in profiles; default off = `--no-reasoning-preserve`, matching the plugin's historical behavior — upstream defaults to preserve ON) |
 | MTP | `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` when `mtp > 0 && (ctx <= 131072 || ignoreCtxCap)` (draft dropped above the ctx ceiling; depth capped at 3 — fixed depth > 3 collapses at large ctx) |
+| idle eviction | `--sleep-idle-seconds <autoUnloadMins * 60>` when the setting is > 0 (default 30 min; omitted when 0). Sleeping server keeps `/health` + `/models` and reloads on next request |
 | mmproj | `--mmproj <file> --image-min-tokens 1024` + `--no-mmproj-offload` when the tab checkbox is on (default) |
 | spawn env | `RADV_PERFTEST=nogttspill` |
 
 ## 2. Profiles audit (`~/.dsh/local-models/profiles.json`)
 
 Schema per profile: `{ id, name, modelPath, ctx, mtpHeads, mmprojPath,
-effort, preserveThinking, ignoreCtxCap, updatedAt }` (`preserve_thinking` is
-accepted as an alias on read; router presets emit `reasoning-preserve = 1/0`). Known audit items:
+effort, preserveThinking, ignoreCtxCap, kvTypeK, kvTypeV, updatedAt }`
+(`preserve_thinking` is accepted as an alias on read; router presets emit
+`reasoning-preserve = 1/0` and a per-model `cache-type-k/-v` pair). Known audit items:
 
 - **Paths must exist and live on the fast mount**. Referencing the failing/
   legacy `/mnt/disco1` is a red flag - targets are under `/mnt/raid0/GGUF/`.
@@ -37,11 +40,17 @@ accepted as an alias on read; router presets emit `reasoning-preserve = 1/0`). K
   clamps them on load, but fix the stored value.
 - **Daily qwen35 profile** should use `mtpHeads: 3` at `ctx <= 131072`
   (no KV streaming upstream, so 256K ctx is out of reach on 16 GB VRAM).
+- **KV pair**: profiles without `kvTypeK`/`kvTypeV` run the default
+  `q5_0`/`q4_1`; an unknown id is normalized to that default on save/launch.
+  MLA (DeepSeek-style) profiles must have `kvTypeK === kvTypeV` or the launch
+  is refused.
 - A helper ships with this skill: `node scripts/audit-profiles.mjs`.
 
 ## 3. Tab / client defaults (`lib/client.js`)
 
 - `_mtp = useState(2)` (fixed-MTP head default; the daily tune wants 3)
+- `_kvTypeK = useState("q5_0")`, `_kvTypeV = useState("q4_1")` (the tuned
+  16 GiB pair; the two selects live in the Model card and feed the estimate)
 - `_mmCpu = useState(true)` (mmproj on CPU, frees ~0.87 GiB VRAM)
 - softcap checkbox unchecked by default (`ignoreCtxCap: false` unless the profile sets it)
 
@@ -52,7 +61,10 @@ accepted as an alias on read; router presets emit `reasoning-preserve = 1/0`). K
   `--models-preset` + the model server on a random port).
 - Server log: `~/.dsh/local-models/llama-server.log` — also viewable live in
   the GUI: Local Models tab → **Open terminal** (overlay tail of the same
-  file, backed by `GET /local-models/logs?offset=<nextOffset>`).
+  file, backed by `GET /local-models/logs?offset=<nextOffset>`). Each launch
+  writes a header line (`starting <model> (ctx …, mtp …, effort …,
+  kv <K>/<V>, experts …, mmproj …)`) — the fastest way to confirm what the
+  tab actually asked for.
 - VRAM: `/sys/class/drm/card*/device/mem_info_vram_used|total` (used/total).
 - Current fill: `curl -s http://<port>/slots` -> `n_past` / slot ctx.
 
@@ -63,6 +75,11 @@ accepted as an alias on read; router presets emit `reasoning-preserve = 1/0`). K
   relaunch; bundle composition picks up only at boot.
 - **Client-half changes** (lib/client.js): page refresh is enough (the served
   bundle rev updates automatically).
+- **Router autostart** (`settings.json: { autostartRouter: true }`, toggled
+  from the tab's Router card): dsh boot launches the router from saved
+  profiles and registers `local-router` once healthy. Watch
+  `~/.dsh/local-models/llama-server.log` (`[autostart]` lines) after a
+  restart; needs at least one saved profile, otherwise it logs and skips.
 
 ## 6. Register in dsh + opencode wiring
 
@@ -71,6 +88,10 @@ provider route on the dsh webserver. Single-model mode needs the manual
 **Register in dsh** press; router mode has no Register button — starting
 the router auto-registers the `local-router` route once the server is
 ready (a refresh poll fires it; stopping first cancels a pending one).
+The registered model advertises `maxTokens: min(131072, ctx)` — the full
+131K window for the daily full-window qwen3.x profile (heavy-thinking
+models at xhigh emit thinking blocks past the old 32K default and get
+truncated), and the launched ctx for smaller windows.
 For opencode against the spawned server:
 - the opencode config resolves per directory (project `opencode.json` beats
   nothing; the global `~/.config/opencode/opencode.json(c)` is authoritative

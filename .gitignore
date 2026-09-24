@@ -1,3 +1,8 @@
 node_modules/
 *.log
 .DS_Store
+__pycache__/
+*.pyc
+bench/*.csv
+bench/.vram_peak.*
+.vram_peak.*

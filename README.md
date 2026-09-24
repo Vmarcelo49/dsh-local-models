@@ -7,11 +7,11 @@ Built against stock upstream `llama.cpp` (`llama-server`). No fork, no patches, 
 ## Features
 
 - **Model picker** — in-app file browser (directories + `.gguf` only) with a header-only GGUF parse (architecture, quant, layers, context length, MoE detection) behind `POST /local-models/gguf-meta`
-- **Launch options** — context slider (8K steps, capped at the model's trained context) + fine-tune input, fixed MTP draft depth (0–3), thinking level (`off`/`low`/`medium`/`xhigh`) + preserve-thinking toggle (`--reasoning-preserve` vs `--no-reasoning-preserve`, default off), optional vision `mmproj` (GPU or CPU offload), MoE expert placement (`--cpu-moe` / `--n-cpu-moe` / top-k override) with a fit-to-VRAM helper
-- **Live VRAM estimate** — weights + Q8_0/Q4_0 KV cache + recurrent state + compute/graph + overhead against 16 GB, with fits / safe-margin / max-ctx-that-fits rows (see [Known issues](./KNOWN_ISSUES.md) for Gemma-family accuracy)
+- **Launch options** — context slider (8K steps, capped at the model's trained context) + fine-tune input, KV cache quantization selectors (one for K, one for V — every type `llama-server` accepts, with bytes-per-element shown), fixed MTP draft depth (0–3), thinking level (`off`/`low`/`medium`/`xhigh`) + preserve-thinking toggle (`--reasoning-preserve` vs `--no-reasoning-preserve`, default off), optional vision `mmproj` (GPU or CPU offload), MoE expert placement (`--cpu-moe` / `--n-cpu-moe` / top-k override) with a fit-to-VRAM helper
+- **Live VRAM estimate** — weights + the selected K/V cache types + recurrent state + compute/graph + overhead against 16 GB, with fits / safe-margin / max-ctx-that-fits rows (see [Known issues](./KNOWN_ISSUES.md) for Gemma-family accuracy)
 - **Profiles** — save named launch configurations, reload in one click
 - **Router mode** — serve all saved profiles from one OpenAI-compatible endpoint (`--models-preset`); models load on demand, one resident at a time by default. Starting the router automatically (re-)registers its models in dsh — no manual Register press.
-- **Register in dsh** — writes the ready server as an `llm-pi-ai` provider route (vision modality + thinking levels included)
+- **Register in dsh** — writes the ready server as an `llm-pi-ai` provider route (vision modality + thinking levels included, max output advertised at 131K tokens so long xhigh thinking blocks aren't truncated)
 - **Terminal overlay** — live tail of the `llama-server` log from the tab
 
 ## Requirements
@@ -35,10 +35,12 @@ Restart the dsh web process (bundle composition picks up only at boot), refresh 
 ## Usage
 
 1. **Choose GGUF…** — pick a model file (Home / Models shortcuts, Up navigation).
-2. Tune **context**, **Max MTP head** (fixed draft; capped at 3 — deeper collapses at large ctx), **thinking level** + **preserve thinking** checkbox, optional **mmproj** and **MoE** settings.
+2. Tune **context**, **KV cache K / V**, **Max MTP head** (fixed draft; capped at 3 — deeper collapses at large ctx), **thinking level** + **preserve thinking** checkbox, optional **mmproj** and **MoE** settings.
 3. **Load model**, watch the status card, inspect output via **Open terminal**.
 4. **Register in dsh** — the route (default `local-<alias>`) appears in the Models picker.
 5. Alternatively, save **profiles** and **Start router (from profiles)** for a multi-model endpoint.
+6. Tick **"Start the router automatically when dsh starts"** (Router card) to launch the router at boot and register its `local-router` route once healthy — models stay usable without opening the tab. Needs at least one saved profile; progress lands in `llama-server.log` (`[autostart]` lines, visible via Open terminal).
+7. **Idle eviction** (Router card, "Unload models after …", default 30 min idle) frees VRAM via upstream `--sleep-idle-seconds` on both single loads and the router; the sleeping server keeps answering `/health` and reloads automatically on the next request (one slow request). `0` disables it. Takes effect on the next start — the tab warns when the running server uses a different timer.
 
 ## Configuration
 
@@ -51,9 +53,9 @@ Restart the dsh web process (bundle composition picks up only at boot), refresh 
 | `LOCAL_MODELS_ROUTER_MAX` | `1` | max simultaneously resident router models |
 | `LOCAL_MODELS_MAX_IMAGE_BYTES` | `10485760` | vision image guard |
 | `LOCAL_MODELS_IMAGE_PIXEL_BUDGET` | `4194304` | vision pixel budget |
-| `DSH_HOME` | `~/.dsh` | data dir (`local-models/profiles.json`, `llama-server.log`) |
+| `DSH_HOME` | `~/.dsh` | data dir (`local-models/profiles.json`, `local-models/settings.json`, `llama-server.log`) |
 
-Launch flags are fixed to the validated daily config: full offload, `-b 2048 -ub 512 -t 4 -np 1`, `--flash-attn on --kv-unified`, `--cache-type-k q8_0 --cache-type-v q4_0`, reasoning `--reasoning auto --reasoning-format deepseek --reasoning-effort <level>` plus `--reasoning-preserve` when the preserve toggle (profile `preserveThinking`) is on else `--no-reasoning-preserve`, MTP `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` (dropped above 131072 ctx unless the profile sets `ignoreCtxCap` — the tab's “ignore the MTP ctx softcap” checkbox, which forces the draft on at any ctx and may OOM or collapse decode). Router presets carry the same per-profile choice as `reasoning-preserve = 1/0`.
+Launch flags are fixed to the validated daily config: full offload, `-b 2048 -ub 512 -t 4 -np 1`, `--flash-attn on --kv-unified`, reasoning `--reasoning auto --reasoning-format deepseek --reasoning-effort <level>` plus `--reasoning-preserve` when the preserve toggle (profile `preserveThinking`) is on else `--no-reasoning-preserve`, MTP `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` (dropped above 131072 ctx unless the profile sets `ignoreCtxCap` — the tab's “ignore the MTP ctx softcap” checkbox, which forces the draft on at any ctx and may OOM or collapse decode), and the KV cache pair from the tab's K/V selectors (`--cache-type-k` / `--cache-type-v`, profile fields `kvTypeK` / `kvTypeV`). Every type this `llama-server` accepts is offered (`f32 f16 bf16 q8_0 q5_1 q5_0 q4_1 iq4_nl q4_0`, labeled with its bytes/element); the default `q5_0` K / `q4_1` V is the measured 16 GB sweet spot, and legacy profiles without the fields launch with exactly that pair. Quantized V needs flash-attn (always on here) and the MTP draft KV stays pinned to `q4_0`. MLA models (DeepSeek-style latent KV) reject mixed K/V types in llama.cpp, so the tab warns and keeps Load disabled until both match, and the `/run` route refuses such a launch with a clear error. Router presets carry the same per-profile KV pair and `reasoning-preserve = 1/0` choice.
 
 ## HTTP API (mounted under `/local-models`)
 
@@ -67,6 +69,7 @@ Launch flags are fixed to the validated daily config: full offload, `-b 2048 -ub
 | `POST /local-models/stop` | stop the child (or reap the port) |
 | `POST /local-models/profiles` / `GET` | save (upsert) / list profiles |
 | `POST /local-models/profiles/remove` | delete a profile |
+| `GET /local-models/settings` / `POST` | read / update plugin settings (`autostartRouter`, `autoUnloadMins`) |
 | `POST /local-models/router/start` | build presets from profiles + start router |
 | `POST /local-models/router/unload` | unload one router model |
 | `POST /local-models/router/unload-all` | unload all router models |
@@ -81,7 +84,9 @@ skills/         operator skill: spawn-parity checklist, profile audits
 docs/           UI mockup
 ```
 
-Pure, exported helpers (`normalizeEffort`, `moeArgsFor`, `generateRouterPresets`, `buildProviderProfile`, profiles store) are unit-testable without a running server; `node lib/index.js /path/to/model.gguf` dumps a parsed header as a self-test.
+Pure, exported helpers (`normalizeEffort`, `moeArgsFor`, `generateRouterPresets`, `buildProviderProfile`, profiles store) are covered by `npm test` (node's built-in runner, `test/`); `node lib/index.js /path/to/model.gguf` dumps a parsed header as a self-test.
+
+Host-provided modules: `@deepseek-ai/dsh-client-runtime` and `@deepseek-ai/dsh-client-ui-settings` are injected by the dsh host at bundle time (see the `dsh.client.inject` list in `package.json`) and are deliberately **not** in `dependencies` — they don't exist on npm and must not be installed.
 
 ## Known issues
 
