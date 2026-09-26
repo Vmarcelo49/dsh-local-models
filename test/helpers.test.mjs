@@ -240,3 +240,65 @@ describe("sleepIdleArgsFor / sleepIdleSecsFor", () => {
 		assert.deepEqual(lib.sleepIdleArgsFor("30"), []);
 	});
 });
+
+describe("parseGGUF vocab fallback", () => {
+	// Minimal synthetic GGUF v3 (header + one dummy tensor + 64 B of data) —
+	// enough for the header-only parser, so no multi-GB model is needed.
+	// `arch` gets no <arch>.vocab_size, exactly like a Qwen3.5/3.8-family file.
+	function syntheticGguf({ arch = "qwen35", tokens = 300, vocabSize = null } = {}) {
+		const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32LE(n); return b; };
+		const u64 = (n) => { const b = Buffer.alloc(8); b.writeBigUInt64LE(BigInt(n)); return b; };
+		const str = (s) => { const b = Buffer.from(s, "utf8"); return Buffer.concat([u64(b.length), b]); };
+		const kvStr = (k, v) => Buffer.concat([str(k), u32(8), str(v)]); // type 8 = string
+		const kvU32 = (k, v) => Buffer.concat([str(k), u32(4), u32(v)]); // type 4 = uint32
+		// type 9 = array, `elems` already encoded with the right element type
+		const kvArray = (k, elemType, elems) => Buffer.concat(
+			[str(k), u32(9), u32(elemType), u64(elems.length)].concat(elems));
+		const kv = [kvStr("general.architecture", arch), kvU32(arch + ".block_count", 4)];
+		if (vocabSize != null) kv.push(kvU32(arch + ".vocab_size", vocabSize));
+		if (tokens != null) {
+			// The three big arrays a real tokenizer writes, in llama.cpp's order
+			// (i32 token_type between the two string arrays). merges is one
+			// shorter, so mixing up the two counts cannot pass unnoticed.
+			kv.push(kvArray("tokenizer.ggml.tokens", 8, Array.from({ length: tokens }, (_, i) => str("tok" + i))));
+			kv.push(kvArray("tokenizer.ggml.token_type", 5, Array.from({ length: tokens }, () => u32(1))));
+			kv.push(kvArray("tokenizer.ggml.merges", 8, Array.from({ length: Math.max(tokens - 1, 0) }, (_, i) => str("a b" + i))));
+		}
+		// KV pairs after the token arrays: reading them proves the parser walked
+		// each payload to exactly the right byte instead of skipping it.
+		kv.push(kvU32("tokenizer.ggml.eos_token_id", 1), kvU32(arch + ".context_length", 4096));
+		const header = Buffer.concat([
+			Buffer.from("GGUF", "ascii"), u32(3), u64(1), u64(kv.length), ...kv,
+			str("token_embd.weight"), u32(1), u64(tokens ?? 1), u32(0), u64(0),
+		]);
+		const pad = (32 - (header.length % 32)) % 32;
+		return Buffer.concat([header, Buffer.alloc(pad + 64)]);
+	}
+	let seq = 0;
+	function parse(buf) {
+		const path = join(TMP, "synthetic-" + seq++ + ".gguf");
+		writeFileSync(path, buf);
+		return lib.parseGGUFCached(path).meta;
+	}
+	it("counts tokenizer.ggml.tokens when <arch>.vocab_size is absent", () => {
+		const meta = parse(syntheticGguf({ tokens: 300 }));
+		assert.equal(meta.nVocab, 300);
+		assert.equal(meta.contextLength, 4096); // key after the array still lands
+	});
+	it("prefers an explicit <arch>.vocab_size", () => {
+		assert.equal(parse(syntheticGguf({ tokens: 300, vocabSize: 151936 })).nVocab, 151936);
+	});
+	it("stays null (and warns) when neither source is present", () => {
+		const meta = parse(syntheticGguf({ tokens: null }));
+		assert.equal(meta.nVocab, null);
+		assert.ok(meta.warnings.some((w) => /vocab size/i.test(w)));
+	});
+	it("walks big arrays without keeping their elements", () => {
+		// 100k entries per array: the string arrays would be materialised as
+		// 100k JS strings each before the fix. Only counts are used, and the
+		// KV pairs after them must still be read (tokens, not merges, wins).
+		const meta = parse(syntheticGguf({ tokens: 100000 }));
+		assert.equal(meta.nVocab, 100000);
+		assert.equal(meta.contextLength, 4096);
+	});
+});
