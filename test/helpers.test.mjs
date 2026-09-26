@@ -113,6 +113,13 @@ describe("generateRouterPresets", () => {
 		assert.ok(ini.includes("spec-type = draft-mtp"));
 		assert.ok(ini.includes("reasoning-preserve = 0"));
 	});
+	it("keeps the mmproj on CPU like single mode", () => {
+		const ini = lib.generateRouterPresets([profile({ mmprojPath: "/tmp/mmproj.gguf" })]);
+		assert.ok(ini.includes("mmproj = /tmp/mmproj.gguf"));
+		assert.ok(ini.includes("no-mmproj-offload = 1"));
+		const plain = lib.generateRouterPresets([profile()]);
+		assert.ok(!plain.includes("mmproj"));
+	});
 	it("drops the draft above the ctx ceiling unless ignored", () => {
 		const big = lib.generateRouterPresets([profile({ ctx: 262144 })]);
 		assert.ok(!big.includes("spec-type = draft-mtp"));
