@@ -6,3 +6,6 @@ __pycache__/
 bench/*.csv
 bench/.vram_peak.*
 .vram_peak.*
+# Bench outputs: the scripts and the write-ups are tracked, their run data is not.
+bench/*_results.json
+bench/runs_*.json
