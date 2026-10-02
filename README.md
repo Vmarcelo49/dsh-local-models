@@ -136,3 +136,5 @@ See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) — most notably, the VRAM estimate is 
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/vmarcelo49/dsh-local-models)
