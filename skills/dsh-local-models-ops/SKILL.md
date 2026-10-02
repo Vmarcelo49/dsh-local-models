@@ -21,7 +21,7 @@ The plugin spawn must match the tuned daily config. Verify against
 | `--cache-type-k <K> --cache-type-v <V>` | from the tab's K/V selectors (`kvTypeK`/`kvTypeV` in profiles), default `q5_0`/`q4_1`; accepted ids: `f32 f16 bf16 q8_0 q5_1 q5_0 q4_1 iq4_nl q4_0`. MLA models (DeepSeek-style latent KV, `isMla` in the GGUF) must use the same type for both |
 | `--spec-draft-type-k q4_0 --spec-draft-type-v q4_0` | fixed (MTP draft KV is not user-selectable) |
 | reasoning chain | `--reasoning auto --reasoning-format deepseek --reasoning-preserve/--no-reasoning-preserve --reasoning-effort medium` (preserve toggle in the tab, `preserveThinking` in profiles; default off = `--no-reasoning-preserve`, matching the plugin's historical behavior — upstream defaults to preserve ON) |
-| MTP | `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0.75` when `mtp > 0 && (ctx <= 131072 || ignoreCtxCap)` (draft dropped above the ctx ceiling; depth capped at 3 — fixed depth > 3 collapses at large ctx) |
+| MTP | `--spec-type draft-mtp --spec-draft-n-max N --spec-draft-p-min 0` whenever `mtp > 0` — no ctx ceiling any more (the old `ignoreCtxCap` checkbox is gone), depth 0-7 with 3 the tuned sweet spot (deeper collapses at large ctx) |
 | idle eviction | `--sleep-idle-seconds <autoUnloadMins * 60>` when the setting is > 0 (default 30 min; omitted when 0). Sleeping server keeps `/health` + `/models` and reloads on next request |
 | mmproj | `--mmproj <file> --image-min-tokens 1024` + `--no-mmproj-offload` when the tab checkbox is on (default) |
 | spawn env | `RADV_PERFTEST=nogttspill` |
@@ -29,15 +29,21 @@ The plugin spawn must match the tuned daily config. Verify against
 ## 2. Profiles audit (`~/.dsh/local-models/profiles.json`)
 
 Schema per profile: `{ id, name, modelPath, ctx, mtpHeads, mmprojPath,
-effort, preserveThinking, ignoreCtxCap, kvTypeK, kvTypeV, updatedAt }`
+mmprojCpu, effort, preserveThinking, kvTypeK, kvTypeV, splitMode, tensorSplit,
+cpuMoe, nCpuMoe, expertUsed, arch, updatedAt }`
 (`preserve_thinking` is accepted as an alias on read; router presets emit
-`reasoning-preserve = 1/0` and a per-model `cache-type-k/-v` pair). Known audit items:
+`reasoning-preserve = 1/0`, a per-model `cache-type-k/-v` pair, and
+`no-mmproj-offload = 1` unless the profile sets `mmprojCpu: false`). Known audit items:
 
 - **Paths must exist and live on the fast mount**. Referencing the failing/
   legacy `/mnt/disco1` is a red flag - targets are under `/mnt/raid0/GGUF/`.
-- **MTP depth must be <= 3** (upstream fixed draft; deeper collapses at
-  large ctx). Old profiles may still carry 4-6 from the fork era — the tab
-  clamps them on load, but fix the stored value.
+  A path outside the tab's roots (home + the Runtime card's Model folders + the
+  folders saved profiles already declare) is refused on save and on launch, so
+  a profile pointing somewhere else needs its folder added in the tab first.
+- **MTP depth must be <= 7** (the tab's ceiling; upstream clamps the
+  effective depth to the model's nextn depth) and **3 is the tuned value** —
+  deeper collapses at large ctx. Old profiles may still carry 4-6 from the
+  fork era; the tab keeps them now, so fix the stored value.
 - **Daily qwen35 profile** should use `mtpHeads: 3` at `ctx <= 131072`
   (no KV streaming upstream, so 256K ctx is out of reach on 16 GB VRAM).
 - **KV pair**: profiles without `kvTypeK`/`kvTypeV` run the default
@@ -52,7 +58,11 @@ effort, preserveThinking, ignoreCtxCap, kvTypeK, kvTypeV, updatedAt }`
 - `_kvTypeK = useState("q5_0")`, `_kvTypeV = useState("q4_1")` (the tuned
   16 GiB pair; the two selects live in the Model card and feed the estimate)
 - `_mmCpu = useState(true)` (mmproj on CPU, frees ~0.87 GiB VRAM)
-- softcap checkbox unchecked by default (`ignoreCtxCap: false` unless the profile sets it)
+- no MTP softcap control: the draft is unconditional, and `ignoreCtxCap` in
+  old profiles is ignored
+- `_splitMode = useState("layer")` / `_tensorSplit = useState("")` — the
+  multi-GPU row only renders with more than one detected GPU (or a non-default
+  value carried by a profile), and the default emits no flags at all
 
 ## 4. Diagnostics
 
@@ -108,6 +118,6 @@ For opencode against the spawned server:
   (merge is by id) - edit carefully, keep `updatedAt`.
 - Legacy `disco1` references: the disk is failing; always resolve to
   `/mnt/raid0/GGUF/<author>/<model>/` and verify with `test -f`.
-- Old profiles may carry fork-era fields (`kvStreamMib`, `mtpHeads` 4-6):
-  harmless leftovers the plugin now ignores (MTP clamps to 3 on load), but
-  clean them when auditing.
+- Old profiles may carry fork-era fields (`kvStreamMib`, `ignoreCtxCap`,
+  `mtpHeads` 4-6): harmless leftovers (the tab keeps depths up to 7 and ignores
+  `ignoreCtxCap`), but clean them when auditing.

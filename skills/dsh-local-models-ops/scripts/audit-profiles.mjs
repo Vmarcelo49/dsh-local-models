@@ -11,7 +11,7 @@ import { join } from "node:path";
 
 const PROFILES = process.env.DSH_LOCAL_MODELS_PROFILES || join(homedir(), ".dsh/local-models/profiles.json");
 const LEGACY = "/mnt/disco1";
-const MTP_MAX = 3; // upstream fixed draft: deeper collapses at large ctx
+const MTP_MAX = 7; // tab ceiling (mirrors MTP_MAX in lib/index.js); 3 is the tuned sweet spot
 // Accepted --cache-type-k/v ids (mirrors KV_CACHE_TYPES in lib/index.js);
 // unknown ids are normalized to the q5_0/q4_1 default on save/launch.
 const KV_TYPES = ["f32", "f16", "bf16", "q8_0", "q5_1", "q5_0", "q4_1", "iq4_nl", "q4_0"];
@@ -42,14 +42,14 @@ for (const p of profiles) {
   const ok = (f) => (f ? (existsSync(f) ? "ok" : "MISSING") : "none");
   const legacy = [p.modelPath, p.mmprojPath].some((f) => f && f.includes(LEGACY));
   const preserve = p.preserveThinking ?? p.preserve_thinking ?? false;
-  const metrics = `ctx=${p.ctx} mtp=${p.mtpHeads} effort=${p.effort ?? "?"} preserve=${preserve === true ? "on" : "off"}${p.ignoreCtxCap === true ? " nocap" : ""}`;
+  const metrics = `ctx=${p.ctx} mtp=${p.mtpHeads} effort=${p.effort ?? "?"} preserve=${preserve === true ? "on" : "off"}${p.splitMode && p.splitMode !== "layer" ? " split=" + p.splitMode : ""}`;
   console.log(`- ${id}: model=${ok(p.modelPath)} mmproj=${ok(p.mmprojPath)} | ${metrics}${legacy ? " | !!legacy disco1" : ""}`);
   if (legacy) warn(`legacy ${LEGACY} path (disk is failing; move to /mnt/raid0/GGUF/...)`);
   if (!p.modelPath) fail("missing modelPath");
   else if (!existsSync(p.modelPath)) fail(`model file missing: ${p.modelPath}`);
   if (p.mmprojPath && !existsSync(p.mmprojPath)) fail(`mmproj file missing: ${p.mmprojPath}`);
   if (Number.isInteger(p.mtpHeads) && p.mtpHeads > MTP_MAX) {
-    warn(`mtpHeads=${p.mtpHeads} exceeds the upstream fixed-MTP cap (${MTP_MAX}) - left over from the fork era`);
+    warn(`mtpHeads=${p.mtpHeads} exceeds the tab's MTP ceiling (${MTP_MAX}) - left over from the fork era`);
   }
   if (p.kvStreamMib !== undefined) {
     warn(`stale fork-era kvStreamMib=${p.kvStreamMib} field (ignored by the plugin)`);
