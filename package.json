@@ -5,15 +5,29 @@
   "type": "module",
   "main": "lib/index.js",
   "engines": {
-    "node": ">=22"
+    "node": "^22.19.0 || >=24.0.0"
   },
+  "packageManager": "pnpm@11.7.0",
   "scripts": {
     "test": "node --test test/",
     "audit": "node skills/dsh-local-models-ops/scripts/audit-profiles.mjs"
   },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "llama.cpp",
+    "llama-server",
+    "gguf",
+    "local-models"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Vmarcelo49/dsh-local-models.git"
+  },
+  "homepage": "https://github.com/Vmarcelo49/dsh-local-models#readme",
+  "bugs": {
+    "url": "https://github.com/Vmarcelo49/dsh-local-models/issues"
   },
   "exports": {
     ".": {
@@ -40,7 +54,12 @@
   "files": [
     "lib",
     "skills",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "README.md",
+    "README-pt.md",
+    "README-es.md",
+    "README-zh.md",
+    "README-hi.md"
   ],
   "license": "MIT"
 }

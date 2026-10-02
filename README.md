@@ -22,20 +22,53 @@ Built against stock upstream `llama.cpp` (`llama-server`). No fork, no patches, 
 
 ## Install
 
+A plugin lives inside a dsh **profile**, which is a pnpm project under
+`$DSH_HOME/profiles/<name>`; `dsh plugin` forwards its arguments to pnpm in
+that directory.
+
 ```bash
-cd ~/.dsh/profiles/web
-dsh plugin --profile web add /path/to/dsh-local-models
-# then add "dsh-local-models" to the "bundles" array in package.json
+# from the npm registry
+dsh plugin --profile web add dsh-local-models
+
+# straight from git (plain ESM, no build step)
+dsh plugin --profile web add github:Vmarcelo49/dsh-local-models
+
+# from a local clone, for development (symlinked: edits apply on reload)
+dsh plugin --profile web add link:/path/to/dsh-local-models
 ```
 
-Restart the dsh web process (bundle composition picks up only at boot), refresh the browser, open Settings → **Local Models**.
+`dsh plugin add` writes the dependency **and** appends the package to
+`dsh.profile.bundles` in `$DSH_HOME/profiles/web/package.json` — that array is
+what mounts it, so there is nothing to edit by hand. Restart the dsh web
+process (bundle composition happens at boot), refresh the browser and open
+Settings → **Local Models**.
+
+Check the composition without booting, and remove it again with:
+
+```bash
+dsh --profile web --dump-config | grep -A 2 dsh-local-models
+dsh plugin --profile web remove dsh-local-models
+```
+
+- **pnpm must be on `PATH`.** npm or bun can install the `dsh` CLI itself, but
+  plugin management inside a profile is pnpm's (`dsh plugin` shells out to it
+  and prints `pnpm was not found` otherwise).
+- **No version gate, no exemption.** The package declares no `@deepseek-ai/*`
+  peer dependencies — it only uses injected services (`settings`,
+  `credentials`, `webServer`) and client slots — so `dsh plugin` never refuses
+  it for a dsh mismatch and no `dsh plugin allow-version` is needed.
+- **No build step.** There is no `prepare` script, so the pnpm `allowBuilds`
+  gate that git-hosted plugins hit never triggers.
+- **Manifest check.** [`dsh-plugin-dev check`](https://www.npmjs.com/package/dsh-plugin-guide)
+  (from `dsh-plugin-guide`) validates the bundle manifest: `cordis.patch.yml`,
+  the `dsh.bundle.patch` pointer, `engines` and the `files` whitelist.
 
 > Node-half changes (routes, inject list) need a dsh restart; client-half changes only need a page refresh.
 
 ## Usage
 
 1. **Choose GGUF…** — pick a model file (Home / Models shortcuts, Up navigation).
-2. Tune **context**, **KV cache K / V**, **Max MTP head** (fixed draft; capped at 3 — deeper collapses at large ctx), **thinking level** + **preserve thinking** checkbox, optional **mmproj** and **MoE** settings.
+2. Tune **context**, **KV cache K / V**, **Max MTP head** (fixed draft, 0-7; 3 is the tuned sweet spot — deeper collapses at large ctx), **thinking level** + **preserve thinking** checkbox, optional **mmproj** and **MoE** settings.
 3. **Load model**, watch the status card, inspect output via **Open terminal**.
 4. **Register in dsh** — the route (default `local-<alias>`) appears in the Models picker.
 5. Alternatively, save **profiles** and **Start router (from profiles)** for a multi-model endpoint.
