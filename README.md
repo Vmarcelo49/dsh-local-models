@@ -1,5 +1,7 @@
 # dsh-local-models
 
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/vmarcelo49/dsh-local-models)
+
 A `dsh` addon that adds a **Local Models** tab to the dsh Web GUI: pick a `.gguf` file, tune context and speculative decoding, watch a live VRAM estimate, and load it through `llama-server` — then register the running server as an LLM provider in dsh with one click.
 
 Built against stock upstream `llama.cpp` (`llama-server`). No fork, no patches, no build step: the client bundle is hand-written `React.createElement` (no JSX toolchain) and the node half is dependency-free.
@@ -137,4 +139,4 @@ See [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) — most notably, the VRAM estimate is 
 
 MIT — see [LICENSE](./LICENSE).
 
-[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/vmarcelo49/dsh-local-models)
+
