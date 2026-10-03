@@ -1,6 +1,6 @@
 {
   "name": "dsh-local-models",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "dsh addon: a Local Models settings tab that starts and stops a llama-server child process living with the dsh host process.",
   "type": "module",
   "main": "lib/index.js",
