@@ -98,10 +98,13 @@ provider route on the dsh webserver. Single-model mode needs the manual
 **Register in dsh** press; router mode has no Register button — starting
 the router auto-registers the `local-router` route once the server is
 ready (a refresh poll fires it; stopping first cancels a pending one).
-The registered model advertises `maxTokens: min(131072, ctx)` — the full
-131K window for the daily full-window qwen3.x profile (heavy-thinking
-models at xhigh emit thinking blocks past the old 32K default and get
-truncated), and the launched ctx for smaller windows.
+The registered model advertises `maxTokens: min(32768, floor(ctx/2))` — a
+32K cap at half the window. The advertised value becomes the adapter's
+`defaultMaxTokens`, which compaction uses as its reserved output `O` in
+`W - O - headroom`: advertising the whole window (`O = W`) leaves no
+message budget and proactive compaction never fires. Heavy-thinking models
+at xhigh that need more than 32K must raise per-request maxTokens
+explicitly (which honestly moves the compaction threshold earlier).
 For opencode against the spawned server:
 - the opencode config resolves per directory (project `opencode.json` beats
   nothing; the global `~/.config/opencode/opencode.json(c)` is authoritative

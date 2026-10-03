@@ -11,7 +11,7 @@ Construído sobre o `llama.cpp` upstream sem modificações (`llama-server`). Se
 - **Estimativa de VRAM ao vivo** — pesos + os tipos de cache K/V selecionados + estado recorrente + compute/grafo + overhead contra o total detectado de GPU (nvidia-smi / sysfs do amdgpu, somados entre as GPUs, 16 GB presumidos quando desconhecido), com linhas de cabe / margem de segurança / ctx máximo que cabe (veja [Known issues](./KNOWN_ISSUES.md) para a precisão na família Gemma)
 - **Profiles** — salve configurações de inicialização nomeadas e recarregue com um clique
 - **Modo Router** — serve todos os profiles salvos a partir de um único endpoint compatível com OpenAI (`--models-preset`); os modelos carregam sob demanda, um residente por vez por padrão. Iniciar o router registra (ou re-registra) automaticamente seus modelos no dsh — sem precisar clicar em Register manualmente.
-- **Register in dsh** — grava o servidor pronto como uma rota de provedor `llm-pi-ai` (modalidade de visão + thinking levels incluídos, saída máxima anunciada em 131K tokens para que blocos longos de thinking xhigh não sejam truncados)
+- **Register in dsh** — grava o servidor pronto como uma rota de provedor `llm-pi-ai` (modalidade de visão + thinking levels incluídos, saída máxima anunciada em 32K tokens (limitada à metade da janela para que a compactação mantenha budget de pressão; suba o maxTokens por request explicitamente para blocos longos de thinking xhigh))
 - **Overlay de terminal** — tail ao vivo do log do `llama-server` direto da aba
 
 ## Requirements
