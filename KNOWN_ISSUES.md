@@ -2,6 +2,49 @@
 
 Current, observed limitations — read before trusting affected features.
 
+## Mid-size windows compact far below the advertised context (131K loops at ~38K)
+
+**Observed:** on the Swift 131K profile (xhigh + preserveThinking),
+dsh starts compacting around 32-38K pressure tokens and then re-compacts
+on nearly every step — each summarization replays the whole prefix on the
+local 27B (minutes per attempt), so the session feels stuck in a
+compaction loop while 2/3 of the window sits empty.
+
+**Why:** the registered `maxTokens: 32768` becomes compaction's reserved
+output `O`, and under the dsh-compaction-basic defaults
+(`headroomTokens: 65536`, `thresholdRatio: 0.8`) the trigger is
+`min(0.8 * W, W - O - headroom)`. For W = 131072 that is 32768 — the 32K
+cap keeps a message budget alive but cannot buy a late threshold while the
+64K default headroom (calibrated for 1M-token cloud models) stands. The
+meter prices tools + system on top of the surface, so the visible trigger
+lands a few K above 32768; xhigh thinking then re-adds 10-20K tokens per
+turn and the threshold is crossed again immediately. A 98304 window is the
+same cliff with the opposite symptom: pressure exactly 0, so proactive
+compaction never fires at all (warn-once, overflow recovery only).
+
+**Impact:** 96-131K profiles compact far too early (or never) with a stock
+dsh profile. Loading and generation are unaffected — only the compaction
+schedule is wrong.
+
+**Workarounds / guidance:**
+- Per-model headroom override in `~/.dsh/profiles/web/cordis.patch.yml`
+  (restart `dsh web` after — loader config resolves at boot):
+  ```yaml
+  - id: compaction-basic
+    name: '@deepseek-ai/dsh-compaction-basic'
+    config:
+      modelPolicies:
+        - provider: local-router
+          model: swift-1-5-qwen3-8-27b
+          headroomTokens: 6554
+  ```
+  (~92K threshold for 131K; `compactionBudgetFor(ctx).recommendedHeadroom`
+  in `lib/index.js` computes the value per window — ~4K floor for 96K.)
+  Do NOT shrink the advertised `maxTokens` instead: that truncates the
+  xhigh thinking blocks the 32K cap exists to protect.
+- Zero-config alternative: run the 200K/250K profiles — they threshold at
+  ~106K/158K under defaults (verify VRAM: they use the lighter q4_0 KV).
+
 ## VRAM estimate is inaccurate for Gemma-family models
 
 **Observed:** loading a Gemma model, the VRAM estimate in the Local Models tab

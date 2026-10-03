@@ -180,6 +180,49 @@ describe("buildProviderProfile / buildRouterProfile", () => {
 	});
 });
 
+describe("compactionBudgetFor", () => {
+	it("prices the 131K profile at a ~32K threshold under core defaults", () => {
+		// The reported loop: W = 131072, O = 32768, headroom 65536 →
+		// threshold = min(104857, 32768) = 32768, so compaction fires at
+		// ~32-38K pressure tokens and xhigh thinking refills it every turn.
+		const b = lib.compactionBudgetFor(131072);
+		assert.equal(b.maxTokens, 32768);
+		assert.equal(b.messageBudget, 98304);
+		assert.equal(b.pressureBudget, 32768);
+		assert.equal(b.thresholdTokens, 32768);
+		assert.equal(b.retainTokens, Math.floor(98304 * 0.16));
+		assert.equal(b.viable, true);
+	});
+	it("flags the 96K-window cliff as not viable", () => {
+		// W = 98304, O = 32768 leaves pressure exactly 0: proactive
+		// compaction is disabled entirely (core warns once, recovers only
+		// on overflow).
+		const b = lib.compactionBudgetFor(98304);
+		assert.equal(b.pressureBudget, 0);
+		assert.equal(b.viable, false);
+	});
+	it("recommends a headroom that lands the threshold near 70% of W", () => {
+		for (const W of [98304, 131072, 196608, 256000]) {
+			const b = lib.compactionBudgetFor(W);
+			assert.ok(b.recommendedHeadroom >= 4096 && b.recommendedHeadroom <= 65536);
+			const tuned = lib.compactionBudgetFor(W, { headroomTokens: b.recommendedHeadroom });
+			assert.equal(tuned.viable, true);
+			// ~70% target: accept rounding / the 0.8-ratio ceiling.
+			assert.ok(tuned.thresholdTokens >= Math.floor(W * 0.6), `W=${W} threshold=${tuned.thresholdTokens}`);
+		}
+		// Spot check the 131K headline number: headroom ~6.5K → ~92K threshold.
+		const b = lib.compactionBudgetFor(131072);
+		assert.equal(b.recommendedHeadroom, 98304 - Math.floor(131072 * 0.7));
+		const tuned = lib.compactionBudgetFor(131072, { headroomTokens: b.recommendedHeadroom });
+		assert.equal(tuned.thresholdTokens, 98304 - b.recommendedHeadroom);
+	});
+	it("honors explicit maxTokens / headroom overrides", () => {
+		const b = lib.compactionBudgetFor(131072, { maxTokens: 16384, headroomTokens: 16384 });
+		assert.equal(b.messageBudget, 114688);
+		assert.equal(b.thresholdTokens, Math.min(Math.floor(131072 * 0.8), 114688 - 16384));
+	});
+});
+
 describe("profile store", () => {
 	before(() => {
 		rmSync(lib.profilesFile(), { force: true });
