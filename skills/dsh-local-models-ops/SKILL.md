@@ -111,21 +111,21 @@ so a 131072 window with O = 32768 thresholds at **32768**, firing at
 ~32-38K pressure tokens and looping with xhigh + preserveThinking (every
 turn re-adds 10-20K thinking tokens). A 98304 window is worse: pressure
 exactly 0, proactive compaction disabled entirely. The fix is a per-model
-headroom override in the dsh profile (needs a `dsh web` restart — loader
-normalization happens at boot), NOT a smaller O (that truncates xhigh
-thinking). Compute it with `compactionBudgetFor(ctx).recommendedHeadroom`
-(~6.5K for 131K → ~92K threshold; ~4K floor for 96K → ~61K). Example for
-the Swift 131K route (also add siblings as needed):
-
-```yaml
-- id: compaction-basic
-  name: '@deepseek-ai/dsh-compaction-basic'
-  config:
-    modelPolicies:
-      - provider: local-router
-        model: swift-1-5-qwen3-8-27b
-        headroomTokens: 6554
-```
+headroom override — but placement matters: the engines that run live
+inside the agent-preset scopes (`preset-standard` → `plugins` →
+`compaction` group → `compaction-basic`), NOT the top-level
+`compaction-basic` row (disabled there; a patch on it is dead config that
+dump-config will happily show). So the override must ride a wholesale
+`config` on the preset row (row config is replaced whole, not merged):
+copy the installed preset file
+(`dsh-web-app/presets/standard.patch.yml` → `insert[0].config`), add
+`modelPolicies` to the nested engine, paste as `- id: preset-standard`.
+Compute values with `compactionBudgetFor(ctx).recommendedHeadroom`
+(~6.5K for 131K → ~92K threshold; ~4K floor for 96K → ~61K). Because it
+is wholesale, the row freezes: re-generate after any dsh upgrade that
+touches the preset file, or upstream changes to that preset are silently
+dropped. Only patch presets actually used (`standard` here); `ptc` /
+`cordis` / `minimal` need the same treatment if adopted.
 
 Shortcut with zero config edits: run the bigger window instead — the
 200K/250K profiles threshold at ~106K/158K under defaults.

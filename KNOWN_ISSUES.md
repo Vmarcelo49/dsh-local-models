@@ -27,19 +27,17 @@ dsh profile. Loading and generation are unaffected — only the compaction
 schedule is wrong.
 
 **Workarounds / guidance:**
-- Per-model headroom override in `~/.dsh/profiles/web/cordis.patch.yml`
-  (restart `dsh web` after — loader config resolves at boot):
-  ```yaml
-  - id: compaction-basic
-    name: '@deepseek-ai/dsh-compaction-basic'
-    config:
-      modelPolicies:
-        - provider: local-router
-          model: swift-1-5-qwen3-8-27b
-          headroomTokens: 6554
-  ```
-  (~92K threshold for 131K; `compactionBudgetFor(ctx).recommendedHeadroom`
-  in `lib/index.js` computes the value per window — ~4K floor for 96K.)
+- Per-model headroom override, placed on the **agent preset row**
+  (`- id: preset-standard`, wholesale `config` copied from the installed
+  `dsh-web-app/presets/standard.patch.yml` plus `modelPolicies` on its
+  nested `plugins → compaction → compaction-basic` engine), then restart
+  `dsh web`. A patch on the top-level `compaction-basic` row does NOTHING
+  (that row is disabled; the running engines live in the preset scopes).
+  Because the preset `config` is replaced whole, re-generate it after any
+  dsh upgrade touching the preset file.
+  (~92K threshold for 131K via `headroomTokens: 6554`;
+  `compactionBudgetFor(ctx).recommendedHeadroom` in `lib/index.js`
+  computes the value per window — ~4K floor for 96K.)
   Do NOT shrink the advertised `maxTokens` instead: that truncates the
   xhigh thinking blocks the 32K cap exists to protect.
 - Zero-config alternative: run the 200K/250K profiles — they threshold at
