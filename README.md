@@ -13,7 +13,7 @@ Built against stock upstream `llama.cpp` (`llama-server`). No fork, no patches, 
 - **Live VRAM estimate** — weights + the selected K/V cache types + recurrent state + compute/graph + overhead against the detected GPU total (nvidia-smi / amdgpu sysfs, summed across GPUs, 16 GB assumed when unknown), with fits / safe-margin / max-ctx-that-fits rows (see [Known issues](./KNOWN_ISSUES.md) for Gemma-family accuracy)
 - **Profiles** — save named launch configurations, reload in one click
 - **Router mode** — serve all saved profiles from one OpenAI-compatible endpoint (`--models-preset`); models load on demand, one resident at a time by default. Starting the router automatically (re-)registers its models in dsh — no manual Register press.
-- **Register in dsh** — writes the ready server as an `llm-pi-ai` provider route (vision modality + thinking levels included, max output advertised at 131K tokens so long xhigh thinking blocks aren't truncated)
+- **Register in dsh** — writes the ready server as an `llm-pi-ai` provider route (vision modality + thinking levels included, max output advertised at 32K tokens (capped at half the window so compaction keeps a pressure budget; raise per-request maxTokens explicitly for long xhigh thinking blocks))
 - **Terminal overlay** — live tail of the `llama-server` log from the tab
 
 ## Requirements

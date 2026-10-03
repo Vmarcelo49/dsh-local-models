@@ -158,22 +158,25 @@ describe("slugProfile", () => {
 });
 
 describe("buildProviderProfile / buildRouterProfile", () => {
-	it("defaults ctx to the single-mode 8192 and caps maxTokens", () => {
+	it("defaults ctx to the single-mode 8192 and caps maxTokens below the window", () => {
 		const { profile } = lib.buildProviderProfile({ alias: "m", port: 8080 });
 		assert.equal(profile.models[0].contextWindow, 8192);
-		assert.equal(profile.models[0].maxTokens, 8192);
-		// Full-window (daily 131K) launches advertise the whole window as
-		// max output: heavy-thinking qwen3.x models at xhigh blow past the
-		// old 32K ceiling inside the thinking block.
+		// Half the window: the advertised maxTokens becomes compaction's
+		// reserved output `O` in `W - O - headroom`, so `O = W` would leave
+		// no message budget and proactive compaction would never fire.
+		assert.equal(profile.models[0].maxTokens, 4096);
+		// Full-window (daily 131K) launches cap at the 32K adapter default
+		// instead of the whole window; xhigh thinking past that must raise
+		// per-request maxTokens explicitly.
 		const big = lib.buildProviderProfile({ alias: "m", port: 8080, ctx: 131072 });
-		assert.equal(big.profile.models[0].maxTokens, 131072);
+		assert.equal(big.profile.models[0].maxTokens, 32768);
 	});
 	it("router models follow the same rule", () => {
 		const { profile } = lib.buildRouterProfile([{ id: "m", ctx: 8192 }], {});
 		assert.equal(profile.models[0].contextWindow, 8192);
-		assert.equal(profile.models[0].maxTokens, 8192);
+		assert.equal(profile.models[0].maxTokens, 4096);
 		const big = lib.buildRouterProfile([{ id: "m", ctx: 131072 }], {});
-		assert.equal(big.profile.models[0].maxTokens, 131072);
+		assert.equal(big.profile.models[0].maxTokens, 32768);
 	});
 });
 

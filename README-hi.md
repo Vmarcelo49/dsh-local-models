@@ -11,7 +11,7 @@ stock upstream `llama.cpp` (`llama-server`) के विरुद्ध बन�
 - **Live VRAM estimate** — weights + चुने गए K/V cache types + recurrent state + compute/graph + overhead, detected GPU total के विरुद्ध (nvidia-smi / amdgpu sysfs, सभी GPUs पर summed, अज्ञात होने पर 16 GB माना गया), fits / safe-margin / max-ctx-that-fits पंक्तियों के साथ (Gemma-family सटीकता के लिए [Known issues](./KNOWN_ISSUES.md) देखें)
 - **Profiles** — नामित launch configurations सहेजें, एक क्लिक में फिर लोड करें
 - **Router mode** — सभी सहेजे गए profiles को एक OpenAI-compatible endpoint (`--models-preset`) से serve करें; models माँग पर लोड होते हैं, default रूप से एक बार में एक ही resident रहता है। router शुरू करने पर dsh में उसके models अपने आप (फिर से) register हो जाते हैं — manual Register दबाने की ज़रूरत नहीं।
-- **Register in dsh** — तैयार server को `llm-pi-ai` provider route के रूप में लिखता है (vision modality + thinking levels शामिल, max output 131K tokens बताया गया ताकि लंबे xhigh thinking blocks कटें नहीं)
+- **Register in dsh** — तैयार server को `llm-pi-ai` provider route के रूप में लिखता है (vision modality + thinking levels शामिल, max output 32K tokens बताया गया (window के आधे तक सीमित ताकि compaction का pressure budget बचा रहे; लंबे xhigh thinking blocks के लिए per-request maxTokens स्पष्ट रूप से बढ़ाएं))
 - **Terminal overlay** — tab से ही `llama-server` log का live tail
 
 ## Requirements

@@ -11,7 +11,7 @@
 - **实时显存估算** —— 权重 + 所选的 K/V cache 类型 + 循环状态 + 计算/图 + 额外开销，与检测到的 GPU 总显存对比（nvidia-smi / amdgpu sysfs，多卡求和，未知时按 16 GB 计），并给出 fits / safe-margin / max-ctx-that-fits 三行结果（Gemma 系列的准确性见 [Known issues](./KNOWN_ISSUES.md)）
 - **Profiles** —— 保存具名的启动配置，一键重新加载
 - **路由模式** —— 用一个 OpenAI 兼容端点（`--models-preset`）服务所有已保存的 profile；模型按需加载，默认同一时刻只驻留一个。启动路由会自动在 dsh 中（重新）注册它的模型 —— 无需手动点 Register。
-- **Register in dsh** —— 把已就绪的服务器写成一个 `llm-pi-ai` 提供方路由（包含视觉模态 + thinking levels，最大输出声明为 131K tokens，以免较长的 xhigh thinking 块被截断）
+- **Register in dsh** —— 把已就绪的服务器写成一个 `llm-pi-ai` 提供方路由（包含视觉模态 + thinking levels，最大输出声明为 32K tokens（上限为窗口的一半，以便 compact 保留压力预算；较长的 xhigh thinking 块请显式提高单次请求的 maxTokens））
 - **终端浮层** —— 在标签页里实时跟踪 `llama-server` 日志
 
 ## Requirements
